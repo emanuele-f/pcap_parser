@@ -69,7 +69,6 @@ void hexdump(const void* data, size_t size) {
   }
 }
 
-// hexDump
 int main() {
   pcap_hdr_t header;
   pcaprec_hdr_t packet;
