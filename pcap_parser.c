@@ -18,6 +18,8 @@ typedef u_int32_t uint32;
 typedef u_int16_t uint16;
 typedef int32_t int32;
 
+/* ******************************************************* */
+
 typedef struct pcap_hdr_s {
   uint32 magic_number;   /* magic number */
   uint16 version_major;  /* major version number */
@@ -36,6 +38,8 @@ typedef struct pcaprec_hdr_s {
 } __attribute__((packed)) pcaprec_hdr_t;
 
 static uint32_t u32_identity(uint32_t x) { return x; }
+
+/* ******************************************************* */
 
 // https://gist.github.com/ccbrown/9722406
 void hexdump(const void* data, size_t size) {
@@ -71,18 +75,37 @@ void hexdump(const void* data, size_t size) {
   }
 }
 
+/* ******************************************************* */
+
+static ssize_t readall(int fd, u_char *msg, size_t msgsize) {
+  ssize_t curbytes, sofar;
+
+  curbytes = sofar = 0;
+
+  while((sofar < msgsize) && ((curbytes = read(fd, msg+sofar, msgsize-sofar)) > 0))
+    sofar += curbytes;
+
+  if(sofar != msgsize) {
+    fprintf(stderr, "Error while reading data[%ld/%ld]: [%d] %s\n", sofar, msgsize, errno, strerror(errno));
+    return(-1);
+  }
+
+  return(sofar);
+}
+
+/* ******************************************************* */
+
 int main() {
   pcap_hdr_t header;
   pcaprec_hdr_t packet;
   uint32_t (*ptohl) (uint32_t) = NULL;    /* Pcap to host long */
-  uint32_t snaplen, pkt_size, sofar;
-  ssize_t curbytes;
+  uint32_t snaplen, pkt_size;
   uint64_t offset = 0;
   uint32_t pkt_num = 0;
   u_char *pkt_buf;
   int is_little_endian;
 
-  if(read(STDIN_FILENO, &header, sizeof(header)) != sizeof(header)) {
+  if(readall(STDIN_FILENO, (u_char*)&header, sizeof(header)) != sizeof(header)) {
     fprintf(stderr, "Error while reading PCAP header\n");
     return -1;
   }
@@ -114,7 +137,7 @@ int main() {
 
   pkt_buf = (u_char *) malloc(snaplen);
 
-  while(read(STDIN_FILENO, &packet, sizeof(packet)) == sizeof(packet)) {
+  while(readall(STDIN_FILENO, (u_char*)&packet, sizeof(packet)) == sizeof(packet)) {
     pkt_size = ptohl(packet.incl_len);
 
     printf("\n[+%08lx] PKT.%u.HEADER [%u.%u] size=%u\n", offset, pkt_num, ptohl(packet.ts_sec), ptohl(packet.ts_usec), pkt_size);
@@ -128,15 +151,8 @@ int main() {
 
     printf("[+%08lx] PKT.%u.DATA\n", offset, pkt_num);
 
-    curbytes = 0;
-    sofar = 0;
-    while((sofar < pkt_size) && ((curbytes = read(STDIN_FILENO, pkt_buf+sofar, pkt_size-sofar)) > 0))
-      sofar += curbytes;
-
-    if(sofar != pkt_size) {
-      fprintf(stderr, "Error while reading packet data[%u/%u]: [%d] %s\n", sofar, pkt_size, errno, strerror(errno));
+    if(readall(STDIN_FILENO, pkt_buf, pkt_size) != pkt_size)
       return 1;
-    }
 
     hexdump(pkt_buf, pkt_size);
     offset += pkt_size;
