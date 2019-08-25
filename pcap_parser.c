@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
 #include <endian.h>
 #include <arpa/inet.h>
@@ -73,7 +75,8 @@ int main() {
   pcap_hdr_t header;
   pcaprec_hdr_t packet;
   uint32_t (*ptohl) (uint32_t) = NULL;    /* Pcap to host long */
-  uint32_t snaplen, pkt_size;
+  uint32_t snaplen, pkt_size, sofar;
+  ssize_t curbytes;
   uint64_t offset = 0;
   uint32_t pkt_num = 0;
   u_char *pkt_buf;
@@ -125,8 +128,13 @@ int main() {
 
     printf("[+%08lx] PKT.%u.DATA\n", offset, pkt_num);
 
-    if(read(STDIN_FILENO, pkt_buf, pkt_size) != pkt_size) {
-      fprintf(stderr, "Error while reading packet data\n");
+    curbytes = 0;
+    sofar = 0;
+    while((sofar < pkt_size) && ((curbytes = read(STDIN_FILENO, pkt_buf+sofar, pkt_size-sofar)) > 0))
+      sofar += curbytes;
+
+    if(sofar != pkt_size) {
+      fprintf(stderr, "Error while reading packet data[%u/%u]: [%d] %s\n", sofar, pkt_size, errno, strerror(errno));
       return 1;
     }
 
